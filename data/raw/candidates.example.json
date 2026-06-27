@@ -1,0 +1,51 @@
+{
+  "candidates": [
+    {
+      "paper": {
+        "title": "Example AI4S Paper With Code",
+        "authors": ["Example Author"],
+        "year": 2026,
+        "source": "manual-example",
+        "arxiv_id": "2601.00001",
+        "url": "https://arxiv.org/abs/2601.00001",
+        "pdf_url": "https://arxiv.org/pdf/2601.00001.pdf"
+      },
+      "attention": {
+        "recent_citation_count": 18,
+        "github_stars": 120,
+        "github_recent_commits": 8,
+        "paper_with_code_has_entry": true,
+        "video_or_talk_count": 2,
+        "blog_or_news_count": 1,
+        "source_confidence": 0.8
+      },
+      "requirement_match_score": 1.5,
+      "notes": [
+        "Fake example data for repository documentation."
+      ]
+    },
+    {
+      "paper": {
+        "title": "Example CS-AI Theory Paper",
+        "authors": ["Another Example Author"],
+        "year": 2026,
+        "source": "manual-example",
+        "doi": "10.0000/example-cs-ai-theory",
+        "url": "https://example.org/papers/cs-ai-theory"
+      },
+      "attention": {
+        "recent_citation_count": 6,
+        "github_stars": 0,
+        "github_recent_commits": 0,
+        "paper_with_code_has_entry": false,
+        "video_or_talk_count": 1,
+        "blog_or_news_count": 2,
+        "source_confidence": 0.6
+      },
+      "requirement_match_score": 2.0,
+      "notes": [
+        "Fake example data for repository documentation."
+      ]
+    }
+  ]
+}

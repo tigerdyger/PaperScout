@@ -1,0 +1,31 @@
+{
+  "weights": {
+    "requirement_match_score": 2.0,
+    "recent_citation_count": 1.0,
+    "github_stars": 0.6,
+    "github_recent_commits": 0.4,
+    "paper_with_code_has_entry": 0.8,
+    "video_or_talk_count": 0.5,
+    "blog_or_news_count": 0.4,
+    "source_confidence": 1.0
+  },
+  "count_signals": [
+    "recent_citation_count",
+    "github_stars",
+    "github_recent_commits",
+    "video_or_talk_count",
+    "blog_or_news_count"
+  ],
+  "boolean_signals": [
+    "paper_with_code_has_entry"
+  ],
+  "missing_signal_names": [
+    "recent_citation_count",
+    "github_stars",
+    "github_recent_commits",
+    "paper_with_code_has_entry",
+    "video_or_talk_count",
+    "blog_or_news_count",
+    "source_confidence"
+  ]
+}

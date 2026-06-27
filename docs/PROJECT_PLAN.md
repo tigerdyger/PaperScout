@@ -159,15 +159,17 @@ MVP 不包括：
 任务：
 
 - 设计一个小型候选论文输入格式。
-- 支持从本地 JSON 或 YAML 文件读取候选论文。
+- 支持从本地 JSON 文件读取候选论文。
 - 用手动提供的注意力字段给候选论文排序。
 
 建议文件：
 
-- `configs/ranking.yaml`
+- `configs/ranking.json`
 - `src/paperscout/collectors/manual.py`
 - `src/paperscout/ranking/scorer.py`
 - `tests/test_ranking.py`
+
+当前阶段暂不支持 YAML，避免为了手写配置过早引入额外依赖。
 
 示例注意力字段：
 

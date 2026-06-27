@@ -27,6 +27,7 @@ reports/*
 !data/history/.gitkeep
 !data/processed/.gitkeep
 !data/raw/.gitkeep
+!data/raw/*.example.json
 !reports/.gitkeep
 
 # Papers and supplementary files should not be committed by default.

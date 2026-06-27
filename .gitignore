@@ -1,0 +1,35 @@
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.venv/
+venv/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Local runtime data
+data/cache/*
+data/history/*
+data/processed/*
+data/raw/*
+reports/*
+
+# Keep directory placeholders
+!data/cache/.gitkeep
+!data/history/.gitkeep
+!data/processed/.gitkeep
+!data/raw/.gitkeep
+!reports/.gitkeep
+
+# Papers and supplementary files should not be committed by default.
+*.pdf
+*.docx
+*.pptx

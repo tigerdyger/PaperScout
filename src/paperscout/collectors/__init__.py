@@ -1,0 +1,1 @@
+"""Candidate paper metadata collectors."""

@@ -125,6 +125,37 @@ PaperScout/
 
 网页界面、自动长期趋势建模、多论文文献图谱等功能都应该等基础流程可靠之后再考虑。
 
+## 命令行用法
+
+当前早期版本支持从手动候选 JSON 文件中推荐一篇未重复论文：
+
+```bash
+paperscout recommend --candidates data/raw/candidates.example.json
+```
+
+如果不传 `--requirements`，命令会用分层菜单询问本次想看的论文方向。菜单会先询问大方向，再询问细分方向，然后询问讲解偏好和自由文本补充。
+
+大方向不局限于传统 AI4S，也可以是更广泛的 AI 交叉方向，例如：
+
+- CS-AI / machine learning methods
+- Chemistry + AI
+- Biology + AI
+- Materials + AI
+- Medicine / Health + AI
+- Economics / Finance + AI
+- Earth / Climate / Energy + AI
+
+推荐结果会保存到 `data/history/recommendations.jsonl`，该文件默认不会被 Git 跟踪。
+
+也可以显式传入本次需求和路径：
+
+```bash
+paperscout recommend \
+  --candidates data/raw/candidates.example.json \
+  --requirements "Chemistry + AI4S, more experiments" \
+  --history data/history/recommendations.jsonl
+```
+
 ## GitHub 策略
 
 这个仓库可以较早推到 GitHub，但在此之前应先完成基本卫生检查：
@@ -146,4 +177,4 @@ PaperScout/
 
 ## 当前状态
 
-当前仓库还是项目骨架，暂时没有实现业务代码。
+当前仓库已经有本地历史记录、手动候选论文加载、透明评分、去重推荐和命令行推荐入口。后续还需要接入真实数据源和论文/SI 分析流程。

@@ -14,11 +14,21 @@ python -m pip install -e ".[dev]"
 
 ## 本地检查
 
-当前阶段还没有业务测试。之后可以用下面的命令运行测试：
+可以用下面的命令运行测试：
 
 ```bash
 pytest
 ```
+
+## 本地运行
+
+安装后可以运行：
+
+```bash
+paperscout recommend --candidates data/raw/candidates.example.json
+```
+
+这会从手动候选文件中选择一篇未重复论文，并把推荐记录写入 `data/history/recommendations.jsonl`。如果不传 `--requirements`，CLI 会用分层菜单询问方向、细分方向和讲解偏好；如果要做脚本化测试，可以直接传 `--requirements`。历史文件默认被 Git 忽略。
 
 ## 不要提交的内容
 

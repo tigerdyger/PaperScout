@@ -256,6 +256,9 @@ paperscout recommend --candidates data/raw/candidates.example.json
 - 一次运行可以从监控来源获取有界候选集合。
 - 相同查询再次运行时默认使用缓存，除非用户要求刷新。
 - 缺少 API key 时给出清楚错误信息，而不是直接抛出难读的 stack trace。
+- `collect` 命令可以把真实数据源结果导出为候选 JSON。
+- 多来源候选可以按稳定论文标识合并。
+- GitHub repository 信号只在显式 repo URL/full name 匹配时附加，不做模糊标题匹配。
 
 ## 阶段 5：注意力排序初版
 

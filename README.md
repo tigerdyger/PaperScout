@@ -147,6 +147,19 @@ paperscout recommend --candidates data/raw/candidates.example.json
 
 推荐结果会保存到 `data/history/recommendations.jsonl`，该文件默认不会被 Git 跟踪。
 
+也可以先从真实元数据源收集候选论文，再推荐：
+
+```bash
+paperscout collect \
+  --query "AI chemistry molecular dynamics" \
+  --source arxiv \
+  --output data/raw/candidates.generated.json
+
+paperscout recommend --candidates data/raw/candidates.generated.json
+```
+
+当前 `collect` 默认只查询 arXiv。Semantic Scholar 和 GitHub 支持已经存在，但仍然建议谨慎使用：Semantic Scholar 引用数不是最近 30 天新增引用，GitHub repository 只有在候选论文元数据明确包含 repo URL 时才会附加到论文候选上；arXiv 摘要里明写的 GitHub 链接会被结构化保存，但不会做标题模糊匹配。
+
 也可以显式传入本次需求和路径：
 
 ```bash
@@ -177,4 +190,6 @@ paperscout recommend \
 
 ## 当前状态
 
-当前仓库已经有本地历史记录、手动候选论文加载、透明评分、去重推荐和命令行推荐入口。后续还需要接入真实数据源和论文/SI 分析流程。
+当前仓库已经有本地历史记录、手动候选论文加载、透明评分、去重推荐、命令行推荐入口，以及 arXiv / Semantic Scholar / GitHub 的早期元数据采集流程。真实数据源可以先导出为候选 JSON，再交给推荐命令使用。
+
+仍未完成的核心部分包括：近期注意力信号的更严谨排序、论文 PDF 和 SI 的解析、结构化讲解生成、反馈收集入口，以及根据历史反馈调整推荐和讲解风格。

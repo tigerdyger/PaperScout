@@ -2,7 +2,10 @@ import json
 from io import StringIO
 from types import SimpleNamespace
 
-from paperscout.interfaces.cli import main, run_recommend
+from paperscout.collectors.github import GitHubRepository
+from paperscout.collectors.manual import ManualCandidate, load_manual_candidates
+from paperscout.interfaces import cli
+from paperscout.interfaces.cli import main, run_collect, run_recommend
 from paperscout.storage.jsonl_store import (
     append_recommendation,
     load_recommendations,
@@ -285,3 +288,209 @@ def test_guided_requirements_allows_no_extra_constraints(tmp_path) -> None:
     assert load_recommendations(history_path)[0].user_requirements == (
         "no_extra_constraints"
     )
+
+
+def test_collect_command_writes_merged_candidates(monkeypatch, tmp_path) -> None:
+    output_path = tmp_path / "candidates.generated.json"
+
+    def fake_search_arxiv(query, max_results, refresh):
+        assert query == "AI chemistry"
+        assert max_results == 3
+        assert refresh is True
+        return [
+            ManualCandidate(
+                paper=PaperMetadata(
+                    title="arXiv candidate",
+                    arxiv_id="2401.00001",
+                    extra={"github_url": "https://github.com/owner/repo"},
+                ),
+                attention={"source_confidence": 0.7},
+            )
+        ]
+
+    def fake_search_semantic_scholar(query, limit, require_api_key, refresh):
+        assert query == "AI chemistry"
+        assert limit == 3
+        assert require_api_key is True
+        assert refresh is True
+        return [
+            ManualCandidate(
+                paper=PaperMetadata(
+                    title="Semantic Scholar candidate",
+                    arxiv_id="2401.00001",
+                    semantic_scholar_id="abc123",
+                ),
+                attention={
+                    "source_confidence": 0.8,
+                    "semantic_scholar_citation_count": 20,
+                },
+            )
+        ]
+
+    def fake_search_github_repositories(
+        query, max_results, require_token, refresh
+    ):
+        assert query == "owner repo"
+        assert max_results == 2
+        assert require_token is True
+        assert refresh is True
+        return [
+            GitHubRepository(
+                full_name="owner/repo",
+                html_url="https://github.com/owner/repo",
+                stars=99,
+            )
+        ]
+
+    monkeypatch.setattr(cli, "search_arxiv", fake_search_arxiv)
+    monkeypatch.setattr(
+        cli,
+        "search_semantic_scholar",
+        fake_search_semantic_scholar,
+    )
+    monkeypatch.setattr(
+        cli,
+        "search_github_repositories",
+        fake_search_github_repositories,
+    )
+    args = SimpleNamespace(
+        query="AI chemistry",
+        output=output_path,
+        source=["arxiv", "semantic-scholar"],
+        max_results=3,
+        refresh=True,
+        require_api_keys=True,
+        github_query="owner repo",
+        github_max_results=2,
+    )
+
+    exit_code = run_collect(args)
+    candidates = load_manual_candidates(output_path)
+
+    assert exit_code == 0
+    assert len(candidates) == 1
+    assert candidates[0].paper.semantic_scholar_id == "abc123"
+    assert candidates[0].attention["source_confidence"] == 0.8
+    assert candidates[0].attention["semantic_scholar_citation_count"] == 20
+    assert candidates[0].attention["github_stars"] == 99
+
+
+def test_collect_command_defaults_to_arxiv(monkeypatch, tmp_path) -> None:
+    output_path = tmp_path / "candidates.generated.json"
+
+    def fake_search_arxiv(query, max_results, refresh):
+        return [
+            ManualCandidate(
+                paper=PaperMetadata(title="Default arXiv", arxiv_id="2401.00003"),
+                attention={"source_confidence": 0.7},
+            )
+        ]
+
+    monkeypatch.setattr(cli, "search_arxiv", fake_search_arxiv)
+    args = SimpleNamespace(
+        query="AI",
+        output=output_path,
+        source=None,
+        max_results=10,
+        refresh=False,
+        require_api_keys=False,
+        github_query=None,
+        github_max_results=5,
+    )
+
+    exit_code = run_collect(args)
+    candidates = load_manual_candidates(output_path)
+
+    assert exit_code == 0
+    assert len(candidates) == 1
+    assert candidates[0].paper.title == "Default arXiv"
+
+
+def test_collect_command_fetches_explicit_github_repository(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    output_path = tmp_path / "candidates.generated.json"
+
+    def fake_search_arxiv(query, max_results, refresh):
+        return [
+            ManualCandidate(
+                paper=PaperMetadata(
+                    title="Explicit code",
+                    arxiv_id="2401.00004",
+                    extra={"github_url": "https://github.com/owner/repo"},
+                ),
+                attention={"source_confidence": 0.7},
+            )
+        ]
+
+    def fake_search_github_repositories(
+        query, max_results, require_token, refresh
+    ):
+        return []
+
+    def fake_fetch_github_repository(full_name, require_token, refresh):
+        assert full_name == "owner/repo"
+        return GitHubRepository(
+            full_name="owner/repo",
+            html_url="https://github.com/owner/repo",
+            stars=14,
+        )
+
+    monkeypatch.setattr(cli, "search_arxiv", fake_search_arxiv)
+    monkeypatch.setattr(
+        cli,
+        "search_github_repositories",
+        fake_search_github_repositories,
+    )
+    monkeypatch.setattr(cli, "fetch_github_repository", fake_fetch_github_repository)
+    args = SimpleNamespace(
+        query="AI",
+        output=output_path,
+        source=["arxiv"],
+        max_results=10,
+        refresh=False,
+        require_api_keys=False,
+        github_query="owner repo",
+        github_max_results=5,
+    )
+
+    exit_code = run_collect(args)
+    candidates = load_manual_candidates(output_path)
+
+    assert exit_code == 0
+    assert candidates[0].attention["github_stars"] == 14
+    assert candidates[0].paper.extra["github_repository"]["full_name"] == "owner/repo"
+
+
+def test_collect_command_returns_clean_error_for_collector_failure(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    output_path = tmp_path / "candidates.generated.json"
+    output = StringIO()
+
+    def fake_search_semantic_scholar(query, limit, require_api_key, refresh):
+        raise RuntimeError("SEMANTIC_SCHOLAR_API_KEY is required.")
+
+    monkeypatch.setattr(
+        cli,
+        "search_semantic_scholar",
+        fake_search_semantic_scholar,
+    )
+    args = SimpleNamespace(
+        query="AI chemistry",
+        output=output_path,
+        source=["semantic-scholar"],
+        max_results=10,
+        refresh=False,
+        require_api_keys=True,
+        github_query=None,
+        github_max_results=5,
+    )
+
+    exit_code = run_collect(args, output=output)
+
+    assert exit_code == 1
+    assert "采集失败: SEMANTIC_SCHOLAR_API_KEY is required." in output.getvalue()
+    assert not output_path.exists()

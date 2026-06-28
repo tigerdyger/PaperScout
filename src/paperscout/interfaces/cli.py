@@ -7,7 +7,24 @@ import sys
 from pathlib import Path
 from typing import Callable, List, Optional, TextIO
 
-from paperscout.collectors.manual import load_manual_candidates
+from paperscout.collectors.arxiv import search_arxiv
+from paperscout.collectors.cache import HttpRequestError
+from paperscout.collectors.github import (
+    GitHubRepository,
+    fetch_github_repository,
+    search_github_repositories,
+)
+from paperscout.collectors.manual import (
+    ManualCandidate,
+    dump_manual_candidates,
+    load_manual_candidates,
+)
+from paperscout.collectors.merge import (
+    attach_github_repositories,
+    collect_explicit_github_full_names,
+    merge_candidate_lists,
+)
+from paperscout.collectors.semantic_scholar import search_semantic_scholar
 from paperscout.ranking.scorer import RankingConfig, load_ranking_config
 from paperscout.recommender.select import SelectionResult, select_best_candidate
 from paperscout.storage.jsonl_store import (
@@ -138,6 +155,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if args.command == "recommend":
         return run_recommend(args)
+    if args.command == "collect":
+        return run_collect(args)
 
     parser.print_help()
     return 1
@@ -197,6 +216,57 @@ def build_parser() -> argparse.ArgumentParser:
         help="number of ranked candidates to print",
     )
 
+    collect = subparsers.add_parser(
+        "collect",
+        help="collect candidates from real metadata sources into a JSON file",
+    )
+    collect.add_argument(
+        "--query",
+        required=True,
+        help="query string for metadata sources",
+    )
+    collect.add_argument(
+        "--output",
+        type=Path,
+        default=Path("data/raw/candidates.generated.json"),
+        help="output candidate JSON path",
+    )
+    collect.add_argument(
+        "--source",
+        action="append",
+        choices=["arxiv", "semantic-scholar"],
+        help="metadata source to use; can be repeated; default is arxiv",
+    )
+    collect.add_argument(
+        "--max-results",
+        type=int,
+        default=10,
+        help="maximum results per paper metadata source",
+    )
+    collect.add_argument(
+        "--refresh",
+        action="store_true",
+        help="ignore cached HTTP responses",
+    )
+    collect.add_argument(
+        "--require-api-keys",
+        action="store_true",
+        help="require API keys for sources that support them",
+    )
+    collect.add_argument(
+        "--github-query",
+        help=(
+            "optional GitHub repository search query for code attention signals; "
+            "also fetches explicit repo URLs found in candidates"
+        ),
+    )
+    collect.add_argument(
+        "--github-max-results",
+        type=int,
+        default=5,
+        help="maximum GitHub repositories to inspect when --github-query is used",
+    )
+
     return parser
 
 
@@ -250,6 +320,108 @@ def run_recommend(
     print(f"已保存推荐记录: {args.history}", file=output)
     print(f"record_id: {record.record_id}", file=output)
     return 0
+
+
+def run_collect(
+    args: argparse.Namespace,
+    *,
+    output: Optional[TextIO] = None,
+) -> int:
+    if output is None:
+        output = sys.stdout
+
+    try:
+        sources = args.source or ["arxiv"]
+        collected = []
+        for source in sources:
+            if source == "arxiv":
+                arxiv_candidates = search_arxiv(
+                    args.query,
+                    max_results=args.max_results,
+                    refresh=args.refresh,
+                )
+                collected.append(arxiv_candidates)
+                print(f"arXiv candidates: {len(arxiv_candidates)}", file=output)
+            elif source == "semantic-scholar":
+                semantic_scholar_candidates = search_semantic_scholar(
+                    args.query,
+                    limit=args.max_results,
+                    require_api_key=args.require_api_keys,
+                    refresh=args.refresh,
+                )
+                collected.append(semantic_scholar_candidates)
+                print(
+                    f"Semantic Scholar candidates: {len(semantic_scholar_candidates)}",
+                    file=output,
+                )
+            else:
+                raise ValueError(f"unsupported source: {source}")
+
+        candidates = merge_candidate_lists(*collected)
+        github_attached = 0
+        if args.github_query:
+            repositories = search_github_repositories(
+                args.github_query,
+                max_results=args.github_max_results,
+                require_token=args.require_api_keys,
+                refresh=args.refresh,
+            )
+            repositories.extend(
+                _fetch_explicit_github_repositories(
+                    candidates,
+                    repositories,
+                    require_token=args.require_api_keys,
+                    refresh=args.refresh,
+                    output=output,
+                )
+            )
+            github_attached = attach_github_repositories(candidates, repositories)
+            print(f"GitHub repositories considered: {len(repositories)}", file=output)
+            print(f"GitHub repositories attached: {github_attached}", file=output)
+    except RuntimeError as exc:
+        print(f"采集失败: {exc}", file=output)
+        return 1
+
+    dump_manual_candidates(args.output, candidates)
+    print(f"merged candidates: {len(candidates)}", file=output)
+    print(f"wrote candidates: {args.output}", file=output)
+    if args.github_query and github_attached == 0:
+        print(
+            "GitHub code signals were not attached because no explicit repo match "
+            "was found.",
+            file=output,
+        )
+    return 0
+
+
+def _fetch_explicit_github_repositories(
+    candidates: List[ManualCandidate],
+    repositories: List[GitHubRepository],
+    *,
+    require_token: bool,
+    refresh: bool,
+    output: TextIO,
+) -> List[GitHubRepository]:
+    known_full_names = {repository.full_name.lower() for repository in repositories}
+    fetched = []
+    for full_name in collect_explicit_github_full_names(candidates):
+        if full_name.lower() in known_full_names:
+            continue
+        try:
+            repository = fetch_github_repository(
+                full_name,
+                require_token=require_token,
+                refresh=refresh,
+            )
+        except HttpRequestError as exc:
+            print(
+                f"GitHub repository skipped: {full_name} ({exc})",
+                file=output,
+            )
+            continue
+        fetched.append(repository)
+        known_full_names.add(repository.full_name.lower())
+    return fetched
 
 
 def _resolve_requirements(

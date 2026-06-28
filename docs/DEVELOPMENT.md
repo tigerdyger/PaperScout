@@ -1,6 +1,6 @@
 # 开发说明
 
-这个仓库目前只包含项目骨架。早期开发重点是先把命令行流程和本地历史记录做稳，不急着做前端、登录或部署。
+这个仓库目前处在早期 CLI 阶段。已经具备本地历史记录、手动候选推荐、真实元数据采集和候选导出能力，但还没有论文 PDF/SI 解析、结构化讲解生成、反馈入口、前端、登录或部署。
 
 ## 本地安装
 
@@ -29,6 +29,18 @@ paperscout recommend --candidates data/raw/candidates.example.json
 ```
 
 这会从手动候选文件中选择一篇未重复论文，并把推荐记录写入 `data/history/recommendations.jsonl`。如果不传 `--requirements`，CLI 会用分层菜单询问方向、细分方向和讲解偏好；如果要做脚本化测试，可以直接传 `--requirements`。历史文件默认被 Git 忽略。
+
+也可以先收集真实元数据，再推荐：
+
+```bash
+paperscout collect \
+  --query "all:molecular AND all:learning" \
+  --source arxiv \
+  --max-results 1 \
+  --output data/raw/candidates.generated.json
+
+paperscout recommend --candidates data/raw/candidates.generated.json
+```
 
 ## 不要提交的内容
 

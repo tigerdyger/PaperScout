@@ -15,6 +15,7 @@ from paperscout.interfaces import cli
 from paperscout.interfaces.cli import (
     main,
     run_collect,
+    run_explain,
     run_prepare_materials,
     run_recommend,
 )
@@ -585,3 +586,77 @@ def test_prepare_materials_command_prints_summary(monkeypatch, tmp_path) -> None
     assert "- paper: parsed, type=pdf, sections=1, chars=300" in text
     assert "chunks: 1" in text
     assert "warning paper: pdf_text_extraction_warning: layout loss" in text
+
+
+def test_explain_command_writes_markdown_report(tmp_path) -> None:
+    materials_path = tmp_path / "materials.json"
+    report_path = tmp_path / "report.md"
+    output = StringIO()
+    prepared = PreparedMaterials(
+        paper=PaperMetadata(title="CLI Explain Paper", arxiv_id="2401.00009"),
+        documents=[
+            MaterialDocument(
+                material_id="paper",
+                kind="paper",
+                status="parsed",
+                file_type="text",
+                text_char_count=160,
+                sections=[
+                    MaterialSection(
+                        material_id="paper",
+                        name="Methods",
+                        text=(
+                            "The method uses a loss objective and an energy "
+                            "equation for molecular dynamics force fields."
+                        ),
+                    )
+                ],
+            )
+        ],
+        chunks=[
+            MaterialChunk(
+                chunk_id="paper_chunk_1",
+                material_id="paper",
+                kind="paper",
+                section_name="Methods",
+                text=(
+                    "The method uses a loss objective and an energy equation "
+                    "for molecular dynamics force fields."
+                ),
+                char_count=94,
+            )
+        ],
+    )
+    materials_path.write_text(
+        json.dumps(prepared.to_dict(), ensure_ascii=False),
+        encoding="utf-8",
+    )
+    args = SimpleNamespace(
+        materials=materials_path,
+        output=report_path,
+        requirements="Chemistry + AI; more math",
+        max_snippets=1,
+    )
+
+    exit_code = run_explain(args, output=output)
+
+    assert exit_code == 0
+    assert report_path.exists()
+    assert "report:" in output.getvalue()
+    assert "sections:" in output.getvalue()
+    assert "数学定义和推导" in report_path.read_text(encoding="utf-8")
+
+
+def test_explain_command_rejects_invalid_snippet_count(tmp_path) -> None:
+    output = StringIO()
+    args = SimpleNamespace(
+        materials=tmp_path / "missing.json",
+        output=None,
+        requirements=None,
+        max_snippets=0,
+    )
+
+    exit_code = run_explain(args, output=output)
+
+    assert exit_code == 1
+    assert "positive integer" in output.getvalue()

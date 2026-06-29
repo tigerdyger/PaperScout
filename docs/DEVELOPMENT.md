@@ -1,6 +1,6 @@
 # 开发说明
 
-这个仓库目前处在早期 CLI 阶段。已经具备本地历史记录、手动候选推荐、真实元数据采集、候选导出和论文 PDF/SI 材料准备能力，但还没有结构化讲解生成、反馈入口、前端、登录或部署。
+这个仓库目前处在早期 CLI 阶段。已经具备本地历史记录、手动候选推荐、真实元数据采集、候选导出、论文 PDF/SI 材料准备和结构化 Markdown 报告生成功能，但还没有反馈入口、前端、登录或部署。
 
 ## 本地安装
 
@@ -50,6 +50,17 @@ paperscout prepare-materials \
   --pdf /path/to/paper.pdf \
   --si /path/to/supporting_information.pdf
 ```
+
+根据材料 JSON 生成结构化阅读报告：
+
+```bash
+paperscout explain \
+  --materials data/cache/materials/parsed/<materials-id>.json \
+  --requirements "Chemistry + AI; more math" \
+  --output reports/example-paper.md
+```
+
+当前报告生成不需要 API key。它只做证据抽取和结构化整理，不会把未解析到的公式、表格或 SI 内容补写成确定结论。
 
 ## 不要提交的内容
 

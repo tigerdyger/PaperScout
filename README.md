@@ -181,6 +181,24 @@ paperscout prepare-materials \
 
 解析结果会缓存在 `data/cache/materials/`。当前 PDF 文本抽取会明确记录公式、表格、图片和版式可能丢失的问题；详见 `docs/MATERIALS.md`。
 
+根据已准备的材料生成结构化 Markdown 阅读报告：
+
+```bash
+paperscout explain \
+  --materials data/cache/materials/parsed/<materials-id>.json \
+  --requirements "Chemistry + AI; molecular dynamics; more math"
+```
+
+也可以显式指定输出路径：
+
+```bash
+paperscout explain \
+  --materials data/cache/materials/parsed/<materials-id>.json \
+  --output reports/example-paper.md
+```
+
+当前讲解生成是证据抽取版：它会按章节整理论文和 SI 中的相关片段，并明确标记缺失证据；它不会调用外部 LLM，也不会自动补写没有材料依据的数学推导、实验解释或复现判断。未来如果接入 LLM，应使用 `prompts/` 下的模板约束其只基于证据生成报告。
+
 ## GitHub 策略
 
 这个仓库可以较早推到 GitHub，但在此之前应先完成基本卫生检查：
@@ -202,6 +220,6 @@ paperscout prepare-materials \
 
 ## 当前状态
 
-当前仓库已经有本地历史记录、手动候选论文加载、分组注意力评分、去重推荐、命令行推荐入口，以及 arXiv / Semantic Scholar / GitHub 的早期元数据采集流程。真实数据源可以先导出为候选 JSON，再交给推荐命令使用。
+当前仓库已经有本地历史记录、手动候选论文加载、分组注意力评分、去重推荐、命令行推荐入口，arXiv / Semantic Scholar / GitHub 的早期元数据采集流程，PDF/SI 材料准备流程，以及基于已解析材料的结构化 Markdown 报告生成。
 
-仍未完成的核心部分包括：更丰富的数据源、结构化讲解生成、反馈收集入口，以及根据历史反馈调整推荐和讲解风格。
+仍未完成的核心部分包括：更丰富的数据源、反馈收集入口、根据历史反馈调整推荐，以及更强的 LLM 辅助讲解和核查流程。

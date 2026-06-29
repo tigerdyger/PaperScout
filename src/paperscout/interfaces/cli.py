@@ -7,6 +7,11 @@ import sys
 from pathlib import Path
 from typing import Callable, List, Optional, TextIO
 
+from paperscout.analysis.explainer import (
+    generate_explanation_report,
+    load_prepared_materials,
+    write_explanation_report,
+)
 from paperscout.analysis.materials import prepare_materials
 from paperscout.collectors.arxiv import search_arxiv
 from paperscout.collectors.cache import HttpRequestError
@@ -160,6 +165,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return run_collect(args)
     if args.command == "prepare-materials":
         return run_prepare_materials(args)
+    if args.command == "explain":
+        return run_explain(args)
 
     parser.print_help()
     return 1
@@ -296,6 +303,32 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=1800,
         help="maximum characters per material chunk",
+    )
+
+    explain = subparsers.add_parser(
+        "explain",
+        help="generate a structured Markdown report from prepared materials",
+    )
+    explain.add_argument(
+        "--materials",
+        type=Path,
+        required=True,
+        help="prepared materials JSON path from paperscout prepare-materials",
+    )
+    explain.add_argument(
+        "--output",
+        type=Path,
+        help="output Markdown path; default is reports/YYYY-MM-DD-paper-slug.md",
+    )
+    explain.add_argument(
+        "--requirements",
+        help="optional run requirements to guide evidence selection",
+    )
+    explain.add_argument(
+        "--max-snippets",
+        type=int,
+        default=3,
+        help="maximum evidence snippets per report section",
     )
 
     return parser
@@ -468,6 +501,40 @@ def run_prepare_materials(
                 file=output,
             )
     return 0 if prepared.chunks else 1
+
+
+def run_explain(
+    args: argparse.Namespace,
+    *,
+    output: Optional[TextIO] = None,
+) -> int:
+    if output is None:
+        output = sys.stdout
+    if args.max_snippets <= 0:
+        print("--max-snippets must be a positive integer.", file=output)
+        return 1
+
+    try:
+        materials = load_prepared_materials(args.materials)
+    except (OSError, ValueError) as exc:
+        print(f"讲解生成失败: cannot load materials: {exc}", file=output)
+        return 1
+
+    report = generate_explanation_report(
+        materials,
+        requirements=args.requirements,
+        max_snippets_per_section=args.max_snippets,
+    )
+    report_path = write_explanation_report(report, args.output)
+
+    missing_sections = sum(
+        1 for section in report.sections if section.status == "missing"
+    )
+    print(f"report: {report_path}", file=output)
+    print(f"sections: {len(report.sections)}", file=output)
+    print(f"chunks used: {len(materials.chunks)}", file=output)
+    print(f"sections missing evidence: {missing_sections}", file=output)
+    return 0
 
 
 def _fetch_explicit_github_repositories(

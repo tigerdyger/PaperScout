@@ -57,4 +57,5 @@ paperscout prepare-materials \
 - 还不会解析 docx、xlsx、csv、html SI。
 - 还不会从 PDF 中可靠保留公式、表格和图片。
 - 章节识别是启发式的，主要识别 Abstract、Methods、Results、Discussion、Appendix 等常见标题。
-- 当前只做材料准备，不调用 LLM 生成论文讲解。
+- 后续可以用 `paperscout explain --materials <materials-json>` 基于解析结果生成结构化 Markdown 报告。
+- 当前讲解阶段不调用 LLM，而是先做证据抽取和缺失证据标注。

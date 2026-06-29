@@ -41,10 +41,13 @@
 
 - `recent_citation_count`
 - `github_stars`
+- `github_forks`
 - `github_recent_commits`
 - `paper_with_code_has_entry`
 - `video_or_talk_count`
 - `blog_or_news_count`
+- `semantic_scholar_citation_count`
+- `semantic_scholar_influential_citation_count`
 - `source_confidence`
 
 `requirement_match_score` 是候选论文和本次需求的匹配程度。早期阶段先手动填写，后续 CLI 或 collector 可以再自动化。
@@ -53,9 +56,9 @@
 
 评分配置在 `configs/ranking.json` 中。
 
-计数型信号不会直接使用原始数值，而是使用 `log1p(value)`。这样做是为了避免 GitHub stars 这类大数值直接压倒其他信号。
+阶段 5 以后，评分使用 `docs/RANKING.md` 中说明的分组公式。计数型信号不会直接使用原始数值，而是先使用 `log1p(value) / log1p(reference_value)` 归一化，并截断到 `1`。这样做是为了避免 GitHub stars 或历史总引用数这类大数值直接压倒近期注意力信号。
 
-缺失的信号不会默默当作真实的 0，而是记录到 `missing_signals` 中，方便之后解释推荐结果。
+缺失的信号会记录到 `missing_signals` 中。排序时，缺失信号不提供正向证据；这表示当前监控来源没有观察到这个信号，不表示论文真实世界里一定没有关注度。
 
 ## 当前限制
 

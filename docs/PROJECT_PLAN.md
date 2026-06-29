@@ -271,16 +271,19 @@ paperscout recommend --candidates data/raw/candidates.example.json
 - 谨慎处理缺失信号和低置信度信号。
 - 保存分数解释。
 
-建议公式：
+采用公式：
 
 ```text
 final_score =
   requirement_match_score
   + recent_attention_score
   + reproducibility_signal_score
+  + lifetime_attention_score
   + source_confidence_score
-  - duplicate_or_near_duplicate_penalty
+  - low_confidence_penalty
 ```
+
+计数型信号先用 `log1p(value) / log1p(reference_value)` 归一化并截断到 `1`。每个信号组内部先做加权平均，再乘以组权重。当前默认配置让 `recent_attention_score` 的权重高于 `lifetime_attention_score`，避免历史总引用数或 stars 完全压过近期关注。
 
 注意：
 

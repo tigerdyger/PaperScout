@@ -1,31 +1,71 @@
 {
-  "weights": {
-    "requirement_match_score": 2.0,
-    "recent_citation_count": 1.0,
-    "github_stars": 0.6,
-    "github_recent_commits": 0.4,
-    "paper_with_code_has_entry": 0.8,
-    "video_or_talk_count": 0.5,
-    "blog_or_news_count": 0.4,
-    "source_confidence": 1.0
+  "group_weights": {
+    "requirement_match_score": 1.0,
+    "recent_attention_score": 2.0,
+    "reproducibility_signal_score": 1.0,
+    "lifetime_attention_score": 0.5,
+    "source_confidence_score": 0.8,
+    "low_confidence_penalty": 0.5
+  },
+  "signal_groups": {
+    "recent_attention_score": {
+      "recent_citation_count": 1.0,
+      "github_recent_commits": 0.7,
+      "video_or_talk_count": 0.5,
+      "blog_or_news_count": 0.5
+    },
+    "reproducibility_signal_score": {
+      "paper_with_code_has_entry": 1.0,
+      "github_repository_present": 0.8
+    },
+    "lifetime_attention_score": {
+      "github_stars": 0.7,
+      "github_forks": 0.3,
+      "semantic_scholar_citation_count": 0.5,
+      "semantic_scholar_influential_citation_count": 0.7
+    },
+    "source_confidence_score": {
+      "source_confidence": 1.0
+    }
+  },
+  "count_reference_values": {
+    "recent_citation_count": 25.0,
+    "github_recent_commits": 20.0,
+    "video_or_talk_count": 5.0,
+    "blog_or_news_count": 5.0,
+    "github_stars": 500.0,
+    "github_forks": 50.0,
+    "semantic_scholar_citation_count": 500.0,
+    "semantic_scholar_influential_citation_count": 50.0
   },
   "count_signals": [
     "recent_citation_count",
-    "github_stars",
     "github_recent_commits",
     "video_or_talk_count",
-    "blog_or_news_count"
+    "blog_or_news_count",
+    "github_stars",
+    "github_forks",
+    "semantic_scholar_citation_count",
+    "semantic_scholar_influential_citation_count"
   ],
   "boolean_signals": [
-    "paper_with_code_has_entry"
+    "paper_with_code_has_entry",
+    "github_repository_present"
+  ],
+  "bounded_signals": [
+    "source_confidence"
   ],
   "missing_signal_names": [
     "recent_citation_count",
-    "github_stars",
     "github_recent_commits",
-    "paper_with_code_has_entry",
     "video_or_talk_count",
     "blog_or_news_count",
+    "paper_with_code_has_entry",
+    "github_stars",
+    "github_forks",
+    "semantic_scholar_citation_count",
+    "semantic_scholar_influential_citation_count",
     "source_confidence"
-  ]
+  ],
+  "low_confidence_threshold": 0.5
 }

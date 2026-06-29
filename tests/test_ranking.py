@@ -22,17 +22,18 @@ def test_score_candidate_uses_log_counts_and_reports_missing_signals() -> None:
 
     scored = score_candidate(candidate)
 
-    assert scored.score.components["requirement_match_score"] == 4.0
-    assert scored.score.components["recent_citation_count"] == pytest.approx(
-        math.log1p(9)
+    assert scored.score.components["requirement_match_score"] == 2.0
+    assert scored.score.components["recent_attention_score"] == pytest.approx(
+        2.0 * (math.log1p(9) / math.log1p(25)) / 2.7
     )
-    assert scored.score.components["github_stars"] == pytest.approx(
-        0.6 * math.log1p(99)
+    assert scored.score.components["reproducibility_signal_score"] == 1.0
+    assert scored.score.components["lifetime_attention_score"] == pytest.approx(
+        0.5 * (0.7 * math.log1p(99) / math.log1p(500)) / 2.2
     )
-    assert scored.score.components["paper_with_code_has_entry"] == 0.8
-    assert scored.score.components["source_confidence"] == 0.5
+    assert scored.score.components["source_confidence_score"] == 0.4
     assert "github_recent_commits" in scored.score.missing_signals
-    assert "some configured attention signals are missing" in scored.score.notes
+    assert "github_repository_present" not in scored.score.missing_signals
+    assert "missing signals add no positive evidence" in scored.score.notes[-1]
 
 
 def test_score_candidate_rejects_invalid_attention_values() -> None:
@@ -58,12 +59,19 @@ def test_load_ranking_config(tmp_path) -> None:
     path.write_text(
         """
         {
-          "weights": {
+          "group_weights": {
             "requirement_match_score": 1.0,
-            "source_confidence": 2.0
+            "source_confidence_score": 2.0,
+            "low_confidence_penalty": 0.0
+          },
+          "signal_groups": {
+            "source_confidence_score": {
+              "source_confidence": 1.0
+            }
           },
           "count_signals": [],
           "boolean_signals": [],
+          "bounded_signals": ["source_confidence"],
           "missing_signal_names": ["source_confidence"]
         }
         """,
@@ -82,6 +90,42 @@ def test_load_ranking_config(tmp_path) -> None:
 
     assert scored.score.total == 2.0
     assert scored.score.missing_signals == []
+
+
+def test_recent_attention_outweighs_lifetime_attention() -> None:
+    recent = score_candidate(
+        ManualCandidate(
+            paper=PaperMetadata(title="Recent attention"),
+            attention={"recent_citation_count": 25, "source_confidence": 0.8},
+        )
+    )
+    historical = score_candidate(
+        ManualCandidate(
+            paper=PaperMetadata(title="Historical attention"),
+            attention={
+                "github_stars": 500,
+                "semantic_scholar_citation_count": 500,
+                "source_confidence": 0.8,
+            },
+        )
+    )
+
+    assert recent.score.components["recent_attention_score"] > (
+        historical.score.components["lifetime_attention_score"]
+    )
+    assert recent.score.total > historical.score.total
+
+
+def test_low_confidence_penalty_is_explicit() -> None:
+    scored = score_candidate(
+        ManualCandidate(
+            paper=PaperMetadata(title="Low confidence"),
+            attention={"source_confidence": 0.2},
+        )
+    )
+
+    assert scored.score.components["source_confidence_score"] == pytest.approx(0.16)
+    assert scored.score.components["low_confidence_penalty"] == pytest.approx(-0.15)
 
 
 def test_select_best_candidate_skips_duplicate_history() -> None:

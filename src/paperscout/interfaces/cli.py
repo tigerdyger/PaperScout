@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from typing import Callable, List, Optional, TextIO
 
+from paperscout.analysis.materials import prepare_materials
 from paperscout.collectors.arxiv import search_arxiv
 from paperscout.collectors.cache import HttpRequestError
 from paperscout.collectors.github import (
@@ -157,6 +158,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return run_recommend(args)
     if args.command == "collect":
         return run_collect(args)
+    if args.command == "prepare-materials":
+        return run_prepare_materials(args)
 
     parser.print_help()
     return 1
@@ -265,6 +268,34 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=5,
         help="maximum GitHub repositories to inspect when --github-query is used",
+    )
+
+    materials = subparsers.add_parser(
+        "prepare-materials",
+        help="parse paper PDF and optional SI into cached sections and chunks",
+    )
+    materials.add_argument("--title", required=True, help="paper title")
+    materials.add_argument("--pdf", required=True, help="paper PDF path or URL")
+    materials.add_argument("--si", help="optional SI path or URL")
+    materials.add_argument("--doi", help="optional DOI")
+    materials.add_argument("--arxiv-id", help="optional arXiv ID")
+    materials.add_argument("--url", help="optional paper landing page URL")
+    materials.add_argument(
+        "--cache-dir",
+        type=Path,
+        default=Path("data/cache/materials"),
+        help="materials cache directory",
+    )
+    materials.add_argument(
+        "--refresh",
+        action="store_true",
+        help="re-parse material even if parsed cache exists",
+    )
+    materials.add_argument(
+        "--max-chunk-chars",
+        type=int,
+        default=1800,
+        help="maximum characters per material chunk",
     )
 
     return parser
@@ -392,6 +423,51 @@ def run_collect(
             file=output,
         )
     return 0
+
+
+def run_prepare_materials(
+    args: argparse.Namespace,
+    *,
+    output: Optional[TextIO] = None,
+) -> int:
+    if output is None:
+        output = sys.stdout
+
+    paper = PaperMetadata(
+        title=args.title,
+        doi=args.doi,
+        arxiv_id=args.arxiv_id,
+        url=args.url,
+    )
+    prepared = prepare_materials(
+        paper,
+        paper_pdf=args.pdf,
+        supplementary=args.si,
+        cache_dir=args.cache_dir,
+        refresh=args.refresh,
+        max_chunk_chars=args.max_chunk_chars,
+    )
+
+    print(f"materials cache: {prepared.cache_path}", file=output)
+    print(f"documents: {len(prepared.documents)}", file=output)
+    for document in prepared.documents:
+        print(
+            f"- {document.kind}: {document.status}, "
+            f"type={document.file_type}, "
+            f"sections={len(document.sections)}, "
+            f"chars={document.text_char_count}",
+            file=output,
+        )
+    print(f"chunks: {len(prepared.chunks)}", file=output)
+    if prepared.issues:
+        print("issues:", file=output)
+        for issue in prepared.issues:
+            material = f"{issue.material_id}: " if issue.material_id else ""
+            print(
+                f"- {issue.severity} {material}{issue.code}: {issue.message}",
+                file=output,
+            )
+    return 0 if prepared.chunks else 1
 
 
 def _fetch_explicit_github_repositories(

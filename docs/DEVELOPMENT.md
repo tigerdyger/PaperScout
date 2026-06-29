@@ -1,6 +1,6 @@
 # 开发说明
 
-这个仓库目前处在早期 CLI 阶段。已经具备本地历史记录、手动候选推荐、真实元数据采集和候选导出能力，但还没有论文 PDF/SI 解析、结构化讲解生成、反馈入口、前端、登录或部署。
+这个仓库目前处在早期 CLI 阶段。已经具备本地历史记录、手动候选推荐、真实元数据采集、候选导出和论文 PDF/SI 材料准备能力，但还没有结构化讲解生成、反馈入口、前端、登录或部署。
 
 ## 本地安装
 
@@ -40,6 +40,15 @@ paperscout collect \
   --output data/raw/candidates.generated.json
 
 paperscout recommend --candidates data/raw/candidates.generated.json
+```
+
+准备论文材料：
+
+```bash
+paperscout prepare-materials \
+  --title "Example Paper" \
+  --pdf /path/to/paper.pdf \
+  --si /path/to/supporting_information.pdf
 ```
 
 ## 不要提交的内容

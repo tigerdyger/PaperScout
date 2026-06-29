@@ -2,10 +2,22 @@ import json
 from io import StringIO
 from types import SimpleNamespace
 
+from paperscout.analysis.materials import (
+    MaterialChunk,
+    MaterialDocument,
+    MaterialIssue,
+    MaterialSection,
+    PreparedMaterials,
+)
 from paperscout.collectors.github import GitHubRepository
 from paperscout.collectors.manual import ManualCandidate, load_manual_candidates
 from paperscout.interfaces import cli
-from paperscout.interfaces.cli import main, run_collect, run_recommend
+from paperscout.interfaces.cli import (
+    main,
+    run_collect,
+    run_prepare_materials,
+    run_recommend,
+)
 from paperscout.storage.jsonl_store import (
     append_recommendation,
     load_recommendations,
@@ -494,3 +506,82 @@ def test_collect_command_returns_clean_error_for_collector_failure(
     assert exit_code == 1
     assert "采集失败: SEMANTIC_SCHOLAR_API_KEY is required." in output.getvalue()
     assert not output_path.exists()
+
+
+def test_prepare_materials_command_prints_summary(monkeypatch, tmp_path) -> None:
+    output = StringIO()
+
+    def fake_prepare_materials(
+        paper,
+        paper_pdf,
+        supplementary,
+        cache_dir,
+        refresh,
+        max_chunk_chars,
+    ):
+        assert paper.title == "Material Paper"
+        assert paper.arxiv_id == "2401.00001"
+        assert paper_pdf == "paper.pdf"
+        assert supplementary == "si.txt"
+        assert cache_dir == tmp_path / "cache"
+        assert refresh is True
+        assert max_chunk_chars == 123
+        return PreparedMaterials(
+            paper=paper,
+            cache_path=str(tmp_path / "cache" / "parsed.json"),
+            documents=[
+                MaterialDocument(
+                    material_id="paper",
+                    kind="paper",
+                    status="parsed",
+                    file_type="pdf",
+                    text_char_count=300,
+                    sections=[
+                        MaterialSection(
+                            material_id="paper",
+                            name="Methods",
+                            text="method text",
+                        )
+                    ],
+                )
+            ],
+            chunks=[
+                MaterialChunk(
+                    chunk_id="paper_chunk_1",
+                    material_id="paper",
+                    kind="paper",
+                    section_name="Methods",
+                    text="method text",
+                    char_count=11,
+                )
+            ],
+            issues=[
+                MaterialIssue(
+                    code="pdf_text_extraction_warning",
+                    material_id="paper",
+                    message="layout loss",
+                )
+            ],
+        )
+
+    monkeypatch.setattr(cli, "prepare_materials", fake_prepare_materials)
+    args = SimpleNamespace(
+        title="Material Paper",
+        doi=None,
+        arxiv_id="2401.00001",
+        url=None,
+        pdf="paper.pdf",
+        si="si.txt",
+        cache_dir=tmp_path / "cache",
+        refresh=True,
+        max_chunk_chars=123,
+    )
+
+    exit_code = run_prepare_materials(args, output=output)
+
+    assert exit_code == 0
+    text = output.getvalue()
+    assert "materials cache:" in text
+    assert "- paper: parsed, type=pdf, sections=1, chars=300" in text
+    assert "chunks: 1" in text
+    assert "warning paper: pdf_text_extraction_warning: layout loss" in text

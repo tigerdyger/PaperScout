@@ -314,6 +314,16 @@ final_score =
 - `src/paperscout/analysis/pdf_extract.py`
 - `tests/test_materials.py`
 
+采用实现：
+
+- 用 `pypdf` 抽取 PDF 文本。
+- 支持本地路径或 URL 输入。
+- 支持 PDF、`.txt` 和 `.md` 材料。
+- 对 zip 等 archive SI 先记录为不支持，不自动解包。
+- 解析结果保存到 `data/cache/materials/parsed/`。
+- 原始 URL 下载材料保存到 `data/cache/materials/raw/`。
+- CLI 命令为 `paperscout prepare-materials`。
+
 需要处理的失败模式：
 
 - PDF 文本提取乱码。

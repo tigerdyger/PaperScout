@@ -170,6 +170,17 @@ paperscout recommend \
   --history data/history/recommendations.jsonl
 ```
 
+准备论文 PDF 和可选 SI，供后续讲解阶段使用：
+
+```bash
+paperscout prepare-materials \
+  --title "Example Paper" \
+  --pdf /path/to/paper.pdf \
+  --si /path/to/supporting_information.pdf
+```
+
+解析结果会缓存在 `data/cache/materials/`。当前 PDF 文本抽取会明确记录公式、表格、图片和版式可能丢失的问题；详见 `docs/MATERIALS.md`。
+
 ## GitHub 策略
 
 这个仓库可以较早推到 GitHub，但在此之前应先完成基本卫生检查：
@@ -193,4 +204,4 @@ paperscout recommend \
 
 当前仓库已经有本地历史记录、手动候选论文加载、分组注意力评分、去重推荐、命令行推荐入口，以及 arXiv / Semantic Scholar / GitHub 的早期元数据采集流程。真实数据源可以先导出为候选 JSON，再交给推荐命令使用。
 
-仍未完成的核心部分包括：更丰富的数据源、论文 PDF 和 SI 的解析、结构化讲解生成、反馈收集入口，以及根据历史反馈调整推荐和讲解风格。
+仍未完成的核心部分包括：更丰富的数据源、结构化讲解生成、反馈收集入口，以及根据历史反馈调整推荐和讲解风格。

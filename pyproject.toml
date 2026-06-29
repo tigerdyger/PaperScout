@@ -12,7 +12,9 @@ license = { file = "LICENSE" }
 authors = [
   { name = "LI Shaokang", email = "slifr@connect.ust.hk" }
 ]
-dependencies = []
+dependencies = [
+  "pypdf>=4.0"
+]
 
 [project.scripts]
 paperscout = "paperscout.interfaces.cli:main"

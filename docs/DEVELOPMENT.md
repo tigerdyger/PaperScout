@@ -79,6 +79,18 @@ paperscout explain \
 
 不要把 `.env.local`、LLM prompt 缓存或生成报告提交到 Git。
 
+记录阅读反馈：
+
+```bash
+paperscout feedback \
+  --paper-usefulness 5 \
+  --explanation-quality 4 \
+  --wanted-more-math \
+  --note "希望多讲公式假设"
+```
+
+如果不传分数和标签，CLI 会交互式询问。反馈会写入 `data/history/feedback.jsonl`，并更新 `data/history/profile.json`。
+
 ## 不要提交的内容
 
 这些内容默认应该只保存在本地：

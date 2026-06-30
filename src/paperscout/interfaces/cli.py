@@ -37,6 +37,12 @@ from paperscout.collectors.merge import (
     merge_candidate_lists,
 )
 from paperscout.collectors.semantic_scholar import search_semantic_scholar
+from paperscout.feedback import (
+    build_feedback_record,
+    feedback_summary_lines,
+    profile_from_feedback,
+    select_recommendation_for_feedback,
+)
 from paperscout.llm.client import (
     LLMConfigError,
     LLMError,
@@ -46,9 +52,12 @@ from paperscout.llm.client import (
 from paperscout.ranking.scorer import RankingConfig, load_ranking_config
 from paperscout.recommender.select import SelectionResult, select_best_candidate
 from paperscout.storage.jsonl_store import (
+    append_feedback,
     append_recommendation,
+    load_feedback,
     load_profile,
     load_recommendations,
+    save_profile,
 )
 from paperscout.storage.schemas import (
     NO_EXTRA_CONSTRAINTS,
@@ -179,6 +188,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return run_prepare_materials(args)
     if args.command == "explain":
         return run_explain(args)
+    if args.command == "feedback":
+        return run_feedback(args)
 
     parser.print_help()
     return 1
@@ -390,6 +401,79 @@ def build_parser() -> argparse.ArgumentParser:
         help="optional path to save the exact LLM prompt messages for inspection",
     )
 
+    feedback = subparsers.add_parser(
+        "feedback",
+        help="record reader feedback for a recommendation and update local profile",
+    )
+    feedback.add_argument(
+        "--history",
+        type=Path,
+        default=Path("data/history/recommendations.jsonl"),
+        help="path to recommendation history JSONL",
+    )
+    feedback.add_argument(
+        "--feedback",
+        type=Path,
+        default=Path("data/history/feedback.jsonl"),
+        help="path to feedback history JSONL",
+    )
+    feedback.add_argument(
+        "--profile",
+        type=Path,
+        default=Path("data/history/profile.json"),
+        help="path to reader profile JSON",
+    )
+    feedback.add_argument(
+        "--record-id",
+        help="recommendation record ID; default is latest recommendation",
+    )
+    feedback.add_argument(
+        "--paper-usefulness",
+        type=int,
+        help="paper usefulness score from 1 to 5",
+    )
+    feedback.add_argument(
+        "--explanation-quality",
+        type=int,
+        help="explanation quality score from 1 to 5",
+    )
+    feedback.add_argument(
+        "--too-basic",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="whether the explanation was too basic",
+    )
+    feedback.add_argument(
+        "--too-advanced",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="whether the explanation was too advanced",
+    )
+    feedback.add_argument(
+        "--wanted-more-math",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="whether future explanations should include more math",
+    )
+    feedback.add_argument(
+        "--wanted-more-experiments",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="whether future explanations should include more experiments",
+    )
+    feedback.add_argument(
+        "--wanted-more-code-reproducibility",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="whether future explanations should include more reproducibility detail",
+    )
+    feedback.add_argument("--note", help="free-text feedback note")
+    feedback.add_argument(
+        "--skip-profile-update",
+        action="store_true",
+        help="save feedback without updating profile.json",
+    )
+
     return parser
 
 
@@ -599,6 +683,96 @@ def run_explain(
     return 0
 
 
+def run_feedback(
+    args: argparse.Namespace,
+    *,
+    input_fn: Optional[InputFn] = None,
+    output: Optional[TextIO] = None,
+) -> int:
+    if input_fn is None:
+        input_fn = input
+    if output is None:
+        output = sys.stdout
+
+    recommendations = load_recommendations(args.history)
+    try:
+        recommendation = select_recommendation_for_feedback(
+            recommendations,
+            record_id=args.record_id,
+        )
+        paper_usefulness = _resolve_score(
+            args.paper_usefulness,
+            "论文有用程度",
+            input_fn,
+            output,
+        )
+        explanation_quality = _resolve_score(
+            args.explanation_quality,
+            "讲解质量",
+            input_fn,
+            output,
+        )
+        feedback_record = build_feedback_record(
+            recommendation,
+            paper_usefulness=paper_usefulness,
+            explanation_quality=explanation_quality,
+            too_basic=_resolve_optional_bool(
+                args.too_basic,
+                "讲解是否偏基础？",
+                input_fn,
+                output,
+            ),
+            too_advanced=_resolve_optional_bool(
+                args.too_advanced,
+                "讲解是否偏难？",
+                input_fn,
+                output,
+            ),
+            wanted_more_math=_resolve_optional_bool(
+                args.wanted_more_math,
+                "后续是否希望多讲数学定义和推导？",
+                input_fn,
+                output,
+            ),
+            wanted_more_experiments=_resolve_optional_bool(
+                args.wanted_more_experiments,
+                "后续是否希望多讲实验设计和消融？",
+                input_fn,
+                output,
+            ),
+            wanted_more_code_reproducibility=_resolve_optional_bool(
+                args.wanted_more_code_reproducibility,
+                "后续是否希望多讲代码和可复现性？",
+                input_fn,
+                output,
+            ),
+            note=_resolve_note(args.note, input_fn),
+        )
+    except ValueError as exc:
+        print(f"反馈保存失败: {exc}", file=output)
+        return 1
+
+    append_feedback(args.feedback, feedback_record)
+    print(f"已保存反馈: {args.feedback}", file=output)
+    print(f"推荐记录: {recommendation.record_id or '缺失'}", file=output)
+    print(f"论文: {recommendation.paper.title}", file=output)
+
+    if args.skip_profile_update:
+        return 0
+
+    all_feedback = load_feedback(args.feedback)
+    profile = profile_from_feedback(
+        all_feedback,
+        recommendations=recommendations,
+        existing_profile=load_profile(args.profile),
+    )
+    save_profile(args.profile, profile)
+    print(f"已更新偏好档案: {args.profile}", file=output)
+    for line in feedback_summary_lines(profile):
+        print(line, file=output)
+    return 0
+
+
 def _run_llm_explain(
     args: argparse.Namespace,
     report,
@@ -700,6 +874,61 @@ def _resolve_requirements(
         requirements = _ask_guided_requirements(input_fn, output)
     requirements = str(requirements).strip()
     return requirements or NO_EXTRA_CONSTRAINTS
+
+
+def _resolve_score(
+    score: Optional[int],
+    label: str,
+    input_fn: InputFn,
+    output: TextIO,
+) -> int:
+    if score is not None:
+        return _validate_cli_score(score, label)
+    while True:
+        try:
+            raw_score = input_fn(f"{label}评分（1-5）: ").strip()
+        except EOFError as exc:
+            raise ValueError(f"{label}评分缺失，请传入对应命令行参数") from exc
+        try:
+            return _validate_cli_score(int(raw_score), label)
+        except ValueError:
+            print("请输入 1 到 5 之间的整数。", file=output)
+
+
+def _validate_cli_score(score: int, label: str) -> int:
+    score = int(score)
+    if score < 1 or score > 5:
+        raise ValueError(f"{label}评分必须在 1 到 5 之间")
+    return score
+
+
+def _resolve_optional_bool(
+    value: Optional[bool],
+    question: str,
+    input_fn: InputFn,
+    output: TextIO,
+) -> bool:
+    if value is not None:
+        return bool(value)
+    try:
+        raw_value = input_fn(f"{question} [y/N]: ").strip().lower()
+    except EOFError:
+        return False
+    if raw_value in {"", "n", "no", "0", "否", "不"}:
+        return False
+    if raw_value in {"y", "yes", "1", "是", "对"}:
+        return True
+    print("无法识别，按否处理。", file=output)
+    return False
+
+
+def _resolve_note(note: Optional[str], input_fn: InputFn) -> str:
+    if note is not None:
+        return str(note).strip()
+    try:
+        return input_fn("其他反馈备注？没有可直接回车: ").strip()
+    except EOFError:
+        return ""
 
 
 def _ask_guided_requirements(input_fn: InputFn, output: TextIO) -> str:
@@ -825,6 +1054,8 @@ def _print_context(
         if profile.free_text_preference:
             print(f"偏好备注: {profile.free_text_preference}", file=output)
         print(f"讲解风格: {profile.explanation_style}", file=output)
+        for line in feedback_summary_lines(profile):
+            print(line, file=output)
     print(f"候选论文数: {candidate_count}", file=output)
     print(f"历史推荐数: {previous_count}", file=output)
 

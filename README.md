@@ -210,6 +210,18 @@ paperscout explain \
 
 LLM 模式会先生成证据抽取报告，再把证据摘要交给 OpenAI-compatible 接口生成更自然的中文报告。API key 应放在 `.env.local` 或环境变量中，不要提交到 Git；详见 `docs/LLM.md`。
 
+读完论文和报告后，可以记录反馈：
+
+```bash
+paperscout feedback \
+  --paper-usefulness 5 \
+  --explanation-quality 4 \
+  --wanted-more-math \
+  --note "希望多讲公式假设和失败模式"
+```
+
+反馈会保存到 `data/history/feedback.jsonl`，并更新本地 `profile.json`。后续推荐时 CLI 会打印轻量偏好提示；详见 `docs/FEEDBACK.md`。
+
 ## GitHub 策略
 
 这个仓库可以较早推到 GitHub，但在此之前应先完成基本卫生检查：
@@ -231,6 +243,6 @@ LLM 模式会先生成证据抽取报告，再把证据摘要交给 OpenAI-compa
 
 ## 当前状态
 
-当前仓库已经有本地历史记录、手动候选论文加载、分组注意力评分、去重推荐、命令行推荐入口，arXiv / Semantic Scholar / GitHub 的早期元数据采集流程，PDF/SI 材料准备流程，基于已解析材料的结构化 Markdown 报告生成，以及可选的 OpenAI-compatible LLM 增强讲解入口。
+当前仓库已经有本地历史记录、手动候选论文加载、分组注意力评分、去重推荐、命令行推荐入口，arXiv / Semantic Scholar / GitHub 的早期元数据采集流程，PDF/SI 材料准备流程，基于已解析材料的结构化 Markdown 报告生成，可选的 OpenAI-compatible LLM 增强讲解入口，以及本地反馈记录和轻量偏好提示。
 
-仍未完成的核心部分包括：更丰富的数据源、反馈收集入口、根据历史反馈调整推荐，以及更强的讲解核查流程。
+仍未完成的核心部分包括：更丰富的数据源、更强的讲解核查流程，以及把推荐、材料准备、讲解和反馈串成每周端到端命令。

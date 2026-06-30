@@ -17,11 +17,14 @@ from paperscout.interfaces.cli import (
     main,
     run_collect,
     run_explain,
+    run_feedback,
     run_prepare_materials,
     run_recommend,
 )
 from paperscout.storage.jsonl_store import (
     append_recommendation,
+    load_feedback,
+    load_profile,
     load_recommendations,
     save_profile,
 )
@@ -167,6 +170,60 @@ def test_recommend_command_uses_profile_and_skips_duplicate(tmp_path) -> None:
     text = output.getvalue()
     assert "本地偏好方向: Chemistry + AI4S" in text
     assert "跳过重复候选: 1" in text
+
+
+def test_recommend_command_prints_feedback_summary_from_profile(tmp_path) -> None:
+    candidates_path = tmp_path / "candidates.json"
+    history_path = tmp_path / "history" / "recommendations.jsonl"
+    profile_path = tmp_path / "history" / "profile.json"
+    output = StringIO()
+    save_profile(
+        profile_path,
+        ReaderProfile(
+            preferred_fields=["Chemistry + AI"],
+            free_text_preference="后续讲解倾向: 多讲数学定义和推导",
+            explanation_style="more_math",
+            extra={
+                "feedback_summary": {
+                    "total_count": 2,
+                    "average_paper_usefulness": 4.5,
+                    "average_explanation_quality": 3.5,
+                    "preference_hint": "后续讲解倾向: 多讲数学定义和推导",
+                }
+            },
+        ),
+    )
+    candidates_path.write_text(
+        json.dumps(
+            [
+                {
+                    "paper": {
+                        "title": "Candidate",
+                        "url": "https://example.org/candidate",
+                    },
+                    "attention": {"source_confidence": 0.7},
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    args = SimpleNamespace(
+        candidates=candidates_path,
+        ranking_config=tmp_path / "missing-ranking.json",
+        history=history_path,
+        profile=profile_path,
+        requirements="Chemistry + AI",
+        report_path=None,
+        record_id="rec-003",
+        show_top=1,
+    )
+
+    exit_code = run_recommend(args, output=output)
+
+    assert exit_code == 0
+    text = output.getvalue()
+    assert "反馈样本: 2 条，平均论文有用度 4.5/5，讲解质量 3.5/5" in text
+    assert "反馈提示: 后续讲解倾向: 多讲数学定义和推导" in text
 
 
 def test_recommend_command_returns_error_when_every_candidate_is_duplicate(tmp_path) -> None:
@@ -752,3 +809,194 @@ def test_explain_command_llm_writes_enhanced_report(
     text = output.getvalue()
     assert "mode: llm" in text
     assert "model: Qwen/test-model" in text
+
+
+def test_feedback_command_saves_feedback_and_updates_profile(tmp_path) -> None:
+    history_path = tmp_path / "history" / "recommendations.jsonl"
+    feedback_path = tmp_path / "history" / "feedback.jsonl"
+    profile_path = tmp_path / "history" / "profile.json"
+    output = StringIO()
+    append_recommendation(
+        history_path,
+        RecommendationRecord(
+            paper=PaperMetadata(title="Feedback Paper", arxiv_id="2401.00011"),
+            record_id="rec-feedback",
+            user_requirements="方向: Chemistry + AI；细分方向: force fields",
+        ),
+    )
+    args = SimpleNamespace(
+        history=history_path,
+        feedback=feedback_path,
+        profile=profile_path,
+        record_id=None,
+        paper_usefulness=5,
+        explanation_quality=3,
+        too_basic=True,
+        too_advanced=False,
+        wanted_more_math=True,
+        wanted_more_experiments=False,
+        wanted_more_code_reproducibility=True,
+        note="希望多讲公式和代码",
+        skip_profile_update=False,
+    )
+
+    exit_code = run_feedback(args, output=output)
+    feedback_records = load_feedback(feedback_path)
+    profile = load_profile(profile_path)
+
+    assert exit_code == 0
+    assert len(feedback_records) == 1
+    assert feedback_records[0].recommendation_id == "rec-feedback"
+    assert feedback_records[0].paper_title == "Feedback Paper"
+    assert feedback_records[0].wanted_more_math is True
+    assert profile is not None
+    assert profile.preferred_fields == ["Chemistry + AI"]
+    assert profile.explanation_style == "balanced"
+    assert "已保存反馈" in output.getvalue()
+    assert "反馈样本: 1 条" in output.getvalue()
+
+
+def test_feedback_command_prompts_for_missing_values(tmp_path) -> None:
+    history_path = tmp_path / "history" / "recommendations.jsonl"
+    feedback_path = tmp_path / "history" / "feedback.jsonl"
+    profile_path = tmp_path / "history" / "profile.json"
+    output = StringIO()
+    answers = iter(["4", "5", "n", "n", "y", "n", "y", "多讲可复现细节"])
+    append_recommendation(
+        history_path,
+        RecommendationRecord(
+            paper=PaperMetadata(title="Prompt Paper", arxiv_id="2401.00012"),
+            record_id="rec-prompt",
+        ),
+    )
+    args = SimpleNamespace(
+        history=history_path,
+        feedback=feedback_path,
+        profile=profile_path,
+        record_id="rec-prompt",
+        paper_usefulness=None,
+        explanation_quality=None,
+        too_basic=None,
+        too_advanced=None,
+        wanted_more_math=None,
+        wanted_more_experiments=None,
+        wanted_more_code_reproducibility=None,
+        note=None,
+        skip_profile_update=True,
+    )
+
+    exit_code = run_feedback(
+        args,
+        input_fn=lambda prompt: next(answers),
+        output=output,
+    )
+    feedback = load_feedback(feedback_path)[0]
+
+    assert exit_code == 0
+    assert feedback.paper_usefulness == 4
+    assert feedback.explanation_quality == 5
+    assert feedback.wanted_more_math is True
+    assert feedback.wanted_more_code_reproducibility is True
+    assert feedback.note == "多讲可复现细节"
+    assert not profile_path.exists()
+
+
+def test_feedback_command_handles_eof_for_optional_prompts(tmp_path) -> None:
+    history_path = tmp_path / "history" / "recommendations.jsonl"
+    feedback_path = tmp_path / "history" / "feedback.jsonl"
+    profile_path = tmp_path / "history" / "profile.json"
+    output = StringIO()
+    append_recommendation(
+        history_path,
+        RecommendationRecord(
+            paper=PaperMetadata(title="EOF Paper", arxiv_id="2401.00013"),
+            record_id="rec-eof",
+        ),
+    )
+    args = SimpleNamespace(
+        history=history_path,
+        feedback=feedback_path,
+        profile=profile_path,
+        record_id="rec-eof",
+        paper_usefulness=4,
+        explanation_quality=4,
+        too_basic=None,
+        too_advanced=None,
+        wanted_more_math=None,
+        wanted_more_experiments=None,
+        wanted_more_code_reproducibility=None,
+        note=None,
+        skip_profile_update=True,
+    )
+
+    exit_code = run_feedback(
+        args,
+        input_fn=lambda prompt: (_ for _ in ()).throw(EOFError()),
+        output=output,
+    )
+    feedback = load_feedback(feedback_path)[0]
+
+    assert exit_code == 0
+    assert feedback.too_basic is False
+    assert feedback.wanted_more_math is False
+    assert feedback.note == ""
+
+
+def test_feedback_command_returns_error_when_required_score_hits_eof(tmp_path) -> None:
+    history_path = tmp_path / "history" / "recommendations.jsonl"
+    output = StringIO()
+    append_recommendation(
+        history_path,
+        RecommendationRecord(
+            paper=PaperMetadata(title="Missing Score Paper", arxiv_id="2401.00014"),
+            record_id="rec-missing-score",
+        ),
+    )
+    args = SimpleNamespace(
+        history=history_path,
+        feedback=tmp_path / "feedback.jsonl",
+        profile=tmp_path / "profile.json",
+        record_id="rec-missing-score",
+        paper_usefulness=None,
+        explanation_quality=4,
+        too_basic=False,
+        too_advanced=False,
+        wanted_more_math=False,
+        wanted_more_experiments=False,
+        wanted_more_code_reproducibility=False,
+        note="",
+        skip_profile_update=False,
+    )
+
+    exit_code = run_feedback(
+        args,
+        input_fn=lambda prompt: (_ for _ in ()).throw(EOFError()),
+        output=output,
+    )
+
+    assert exit_code == 1
+    assert "论文有用程度评分缺失" in output.getvalue()
+
+
+def test_feedback_command_returns_error_for_missing_recommendation(tmp_path) -> None:
+    output = StringIO()
+    args = SimpleNamespace(
+        history=tmp_path / "missing-recommendations.jsonl",
+        feedback=tmp_path / "feedback.jsonl",
+        profile=tmp_path / "profile.json",
+        record_id=None,
+        paper_usefulness=5,
+        explanation_quality=5,
+        too_basic=False,
+        too_advanced=False,
+        wanted_more_math=False,
+        wanted_more_experiments=False,
+        wanted_more_code_reproducibility=False,
+        note="",
+        skip_profile_update=False,
+    )
+
+    exit_code = run_feedback(args, output=output)
+
+    assert exit_code == 1
+    assert "recommendation history is empty" in output.getvalue()

@@ -3,14 +3,20 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 from typing import Callable, List, Optional, TextIO
 
 from paperscout.analysis.explainer import (
+    default_report_path,
     generate_explanation_report,
     load_prepared_materials,
     write_explanation_report,
+)
+from paperscout.analysis.llm_explainer import (
+    build_llm_explanation_messages,
+    generate_llm_explanation_report,
 )
 from paperscout.analysis.materials import prepare_materials
 from paperscout.collectors.arxiv import search_arxiv
@@ -31,6 +37,12 @@ from paperscout.collectors.merge import (
     merge_candidate_lists,
 )
 from paperscout.collectors.semantic_scholar import search_semantic_scholar
+from paperscout.llm.client import (
+    LLMConfigError,
+    LLMError,
+    OpenAICompatibleClient,
+    load_llm_config,
+)
 from paperscout.ranking.scorer import RankingConfig, load_ranking_config
 from paperscout.recommender.select import SelectionResult, select_best_candidate
 from paperscout.storage.jsonl_store import (
@@ -330,6 +342,53 @@ def build_parser() -> argparse.ArgumentParser:
         default=3,
         help="maximum evidence snippets per report section",
     )
+    explain.add_argument(
+        "--llm",
+        action="store_true",
+        help="enhance the extractive report with an OpenAI-compatible LLM",
+    )
+    explain.add_argument(
+        "--llm-provider",
+        default="siliconflow",
+        help="LLM provider name; default is siliconflow",
+    )
+    explain.add_argument(
+        "--llm-base-url",
+        help="OpenAI-compatible base URL; SiliconFlow default is used if omitted",
+    )
+    explain.add_argument(
+        "--llm-model",
+        help="model name; can also be set with SILICONFLOW_MODEL",
+    )
+    explain.add_argument(
+        "--llm-temperature",
+        type=float,
+        default=0.2,
+        help="LLM sampling temperature",
+    )
+    explain.add_argument(
+        "--llm-max-tokens",
+        type=int,
+        default=4096,
+        help="maximum LLM output tokens",
+    )
+    explain.add_argument(
+        "--llm-timeout",
+        type=int,
+        default=120,
+        help="LLM HTTP timeout in seconds",
+    )
+    explain.add_argument(
+        "--llm-max-prompt-chars",
+        type=int,
+        default=24000,
+        help="maximum characters of evidence digest sent to the LLM",
+    )
+    explain.add_argument(
+        "--save-llm-prompt",
+        type=Path,
+        help="optional path to save the exact LLM prompt messages for inspection",
+    )
 
     return parser
 
@@ -525,6 +584,9 @@ def run_explain(
         requirements=args.requirements,
         max_snippets_per_section=args.max_snippets,
     )
+    if getattr(args, "llm", False):
+        return _run_llm_explain(args, report, output)
+
     report_path = write_explanation_report(report, args.output)
 
     missing_sections = sum(
@@ -535,6 +597,70 @@ def run_explain(
     print(f"chunks used: {len(materials.chunks)}", file=output)
     print(f"sections missing evidence: {missing_sections}", file=output)
     return 0
+
+
+def _run_llm_explain(
+    args: argparse.Namespace,
+    report,
+    output: TextIO,
+) -> int:
+    if args.llm_max_prompt_chars <= 0:
+        print("--llm-max-prompt-chars must be a positive integer.", file=output)
+        return 1
+    try:
+        config = load_llm_config(
+            provider=args.llm_provider,
+            base_url=args.llm_base_url,
+            model=args.llm_model,
+            temperature=args.llm_temperature,
+            max_tokens=args.llm_max_tokens,
+            timeout_seconds=args.llm_timeout,
+        )
+    except LLMConfigError as exc:
+        print(f"LLM 配置不完整: {exc}", file=output)
+        return 1
+
+    if args.save_llm_prompt:
+        messages = build_llm_explanation_messages(
+            report,
+            max_prompt_chars=args.llm_max_prompt_chars,
+        )
+        args.save_llm_prompt.parent.mkdir(parents=True, exist_ok=True)
+        args.save_llm_prompt.write_text(
+            json.dumps(messages, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+    try:
+        llm_result = generate_llm_explanation_report(
+            report,
+            OpenAICompatibleClient(config),
+            max_prompt_chars=args.llm_max_prompt_chars,
+        )
+    except LLMError as exc:
+        print(f"LLM 讲解生成失败: {exc}", file=output)
+        return 1
+
+    report_path = args.output or _default_llm_output_path(report)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(llm_result.markdown, encoding="utf-8")
+    missing_sections = sum(
+        1 for section in report.sections if section.status == "missing"
+    )
+    print(f"report: {report_path}", file=output)
+    print("mode: llm", file=output)
+    print(f"provider: {config.provider}", file=output)
+    print(f"model: {llm_result.model}", file=output)
+    print(f"prompt chars: {llm_result.prompt_chars}", file=output)
+    print(f"sections: {len(report.sections)}", file=output)
+    print(f"chunks used: {len(report.materials.chunks)}", file=output)
+    print(f"sections missing evidence: {missing_sections}", file=output)
+    return 0
+
+
+def _default_llm_output_path(report) -> Path:
+    extractive_path = default_report_path(report)
+    return extractive_path.with_name(f"{extractive_path.stem}-llm.md")
 
 
 def _fetch_explicit_github_repositories(

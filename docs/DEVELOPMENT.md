@@ -62,6 +62,23 @@ paperscout explain \
 
 当前报告生成不需要 API key。它只做证据抽取和结构化整理，不会把未解析到的公式、表格或 SI 内容补写成确定结论。
 
+如果要测试 SiliconFlow 等 OpenAI-compatible LLM 增强模式，先在本地 `.env.local` 中配置：
+
+```text
+SILICONFLOW_API_KEY=...
+SILICONFLOW_MODEL=...
+```
+
+然后运行：
+
+```bash
+paperscout explain \
+  --materials data/cache/materials/parsed/<materials-id>.json \
+  --llm
+```
+
+不要把 `.env.local`、LLM prompt 缓存或生成报告提交到 Git。
+
 ## 不要提交的内容
 
 这些内容默认应该只保存在本地：

@@ -379,6 +379,32 @@ final_score =
 - 报告不会把论文作者的声称伪装成已经核查的事实。
 - CLI 命令为 `paperscout explain`。
 
+## 阶段 7.5：LLM 讲解增强
+
+目标：在证据抽取报告基础上生成更自然、更深入的中文讲解，同时保留 no-LLM fallback。
+
+任务：
+
+- 支持 OpenAI-compatible LLM 配置，优先支持 SiliconFlow。
+- API key 只从环境变量或 `.env.local` 读取，不从命令行传入，不提交到 Git。
+- 将 Stage 7 的证据摘要、材料状态和缺失证据作为 LLM 输入。
+- 生成 LLM 增强版 Markdown 报告。
+- 支持保存 LLM prompt 供本地检查。
+- LLM 配置缺失或请求失败时给出明确错误，不影响 no-LLM 模式。
+
+建议文件：
+
+- `src/paperscout/llm/client.py`
+- `src/paperscout/analysis/llm_explainer.py`
+- `docs/LLM.md`
+
+完成标准：
+
+- `paperscout explain --llm` 可以在本地配置 key 后调用 SiliconFlow。
+- 不传 `--llm` 时仍然完全不需要 API key。
+- 测试覆盖配置读取、请求构造、prompt 构造和 CLI 写报告路径。
+- 报告继续明确标注 LLM 输出不是独立核查事实。
+
 ## 阶段 8：反馈循环
 
 目标：让评分影响后续行为，但不假装已经有大型推荐系统。

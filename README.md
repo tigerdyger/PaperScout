@@ -199,6 +199,17 @@ paperscout explain \
 
 当前讲解生成是证据抽取版：它会按章节整理论文和 SI 中的相关片段，并明确标记缺失证据；它不会调用外部 LLM，也不会自动补写没有材料依据的数学推导、实验解释或复现判断。未来如果接入 LLM，应使用 `prompts/` 下的模板约束其只基于证据生成报告。
 
+如果已经在本地配置 SiliconFlow API key 和模型名，也可以开启 LLM 增强讲解：
+
+```bash
+paperscout explain \
+  --materials data/cache/materials/parsed/<materials-id>.json \
+  --requirements "Chemistry + AI; molecular dynamics; more math" \
+  --llm
+```
+
+LLM 模式会先生成证据抽取报告，再把证据摘要交给 OpenAI-compatible 接口生成更自然的中文报告。API key 应放在 `.env.local` 或环境变量中，不要提交到 Git；详见 `docs/LLM.md`。
+
 ## GitHub 策略
 
 这个仓库可以较早推到 GitHub，但在此之前应先完成基本卫生检查：
@@ -220,6 +231,6 @@ paperscout explain \
 
 ## 当前状态
 
-当前仓库已经有本地历史记录、手动候选论文加载、分组注意力评分、去重推荐、命令行推荐入口，arXiv / Semantic Scholar / GitHub 的早期元数据采集流程，PDF/SI 材料准备流程，以及基于已解析材料的结构化 Markdown 报告生成。
+当前仓库已经有本地历史记录、手动候选论文加载、分组注意力评分、去重推荐、命令行推荐入口，arXiv / Semantic Scholar / GitHub 的早期元数据采集流程，PDF/SI 材料准备流程，基于已解析材料的结构化 Markdown 报告生成，以及可选的 OpenAI-compatible LLM 增强讲解入口。
 
-仍未完成的核心部分包括：更丰富的数据源、反馈收集入口、根据历史反馈调整推荐，以及更强的 LLM 辅助讲解和核查流程。
+仍未完成的核心部分包括：更丰富的数据源、反馈收集入口、根据历史反馈调整推荐，以及更强的讲解核查流程。

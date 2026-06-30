@@ -9,6 +9,7 @@ from paperscout.analysis.materials import (
     MaterialSection,
     PreparedMaterials,
 )
+from paperscout.analysis.llm_explainer import LLMExplanationResult
 from paperscout.collectors.github import GitHubRepository
 from paperscout.collectors.manual import ManualCandidate, load_manual_candidates
 from paperscout.interfaces import cli
@@ -660,3 +661,94 @@ def test_explain_command_rejects_invalid_snippet_count(tmp_path) -> None:
 
     assert exit_code == 1
     assert "positive integer" in output.getvalue()
+
+
+def test_explain_command_llm_writes_enhanced_report(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    materials_path = tmp_path / "materials.json"
+    report_path = tmp_path / "report-llm.md"
+    prompt_path = tmp_path / "prompt.json"
+    output = StringIO()
+    prepared = PreparedMaterials(
+        paper=PaperMetadata(title="CLI LLM Paper", arxiv_id="2401.00010"),
+        documents=[
+            MaterialDocument(
+                material_id="paper",
+                kind="paper",
+                status="parsed",
+                file_type="text",
+                text_char_count=100,
+                sections=[
+                    MaterialSection(
+                        material_id="paper",
+                        name="Methods",
+                        text="The method defines a loss objective.",
+                    )
+                ],
+            )
+        ],
+        chunks=[
+            MaterialChunk(
+                chunk_id="paper_chunk_1",
+                material_id="paper",
+                kind="paper",
+                section_name="Methods",
+                text="The method defines a loss objective.",
+                char_count=36,
+            )
+        ],
+    )
+    materials_path.write_text(
+        json.dumps(prepared.to_dict(), ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    class FakeClient:
+        def __init__(self, config):
+            assert config.provider == "siliconflow"
+            assert config.model == "Qwen/test-model"
+
+    def fake_generate_llm_explanation_report(report, client, max_prompt_chars):
+        assert report.materials.paper.title == "CLI LLM Paper"
+        assert max_prompt_chars == 5000
+        assert isinstance(client, FakeClient)
+        return LLMExplanationResult(
+            markdown="# CLI LLM Paper\n\nLLM report.",
+            model="Qwen/test-model",
+            usage={"total_tokens": 12},
+            prompt_chars=456,
+        )
+
+    monkeypatch.setenv("SILICONFLOW_API_KEY", "fake-key")
+    monkeypatch.setattr(cli, "OpenAICompatibleClient", FakeClient)
+    monkeypatch.setattr(
+        cli,
+        "generate_llm_explanation_report",
+        fake_generate_llm_explanation_report,
+    )
+    args = SimpleNamespace(
+        materials=materials_path,
+        output=report_path,
+        requirements="Chemistry + AI",
+        max_snippets=1,
+        llm=True,
+        llm_provider="siliconflow",
+        llm_base_url=None,
+        llm_model="Qwen/test-model",
+        llm_temperature=0.2,
+        llm_max_tokens=2000,
+        llm_timeout=30,
+        llm_max_prompt_chars=5000,
+        save_llm_prompt=prompt_path,
+    )
+
+    exit_code = run_explain(args, output=output)
+
+    assert exit_code == 0
+    assert report_path.read_text(encoding="utf-8") == "# CLI LLM Paper\n\nLLM report."
+    assert prompt_path.exists()
+    text = output.getvalue()
+    assert "mode: llm" in text
+    assert "model: Qwen/test-model" in text
